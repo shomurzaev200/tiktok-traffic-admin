@@ -4,3 +4,8 @@ __pycache__/
 *.sql
 .venv/
 backups/
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/next-env.d.ts
+frontend/*.tsbuildinfo

@@ -1,0 +1,52 @@
+name: Verify neon admin
+on:
+  push:
+    branches: [neon-v2]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_USER: traffic
+          POSTGRES_PASSWORD: test-test-test-test-test-test
+          POSTGRES_DB: traffic_test
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U traffic -d traffic_test" --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgresql+psycopg://traffic:test-test-test-test-test-test@127.0.0.1:5432/traffic_test
+      ADMIN_USER: admin
+      ADMIN_PASSWORD: test-admin-password-long-enough-123
+      DB_PASSWORD: test-test-test-test-test-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: pip install -r requirements.txt pytest==8.3.5
+      - run: python -m compileall -q app migrations scripts
+      - run: alembic upgrade head
+      - run: alembic upgrade head
+      - run: pytest -q tests/test_v2.py
+      - run: python -m unittest discover -s tests -p test_direct.py -v
+      - run: npm install --no-audit --no-fund && npm run typecheck && npm run lint && npm run build
+        working-directory: frontend
+      - run: |
+          python scripts/init_env.py
+          docker compose --profile jobs config --quiet
+          docker compose up -d --build --wait --wait-timeout 300
+          docker compose exec -T app python < scripts/smoke_v2.py
+          docker compose restart app
+          sleep 12
+          docker compose exec -T app python < scripts/smoke_v2.py
+          bash scripts/backup.sh
+          printf 'RESTORE_TEST\n' | bash scripts/restore.sh "$(basename "$(find backups -name '*.dump' | head -1)")"
+      - if: always()
+        run: docker compose logs --tail=100 app db
