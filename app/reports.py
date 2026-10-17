@@ -35,11 +35,15 @@ def import_csv(resource,content,user):
 
 def export_report(kind,days):
     from .service import analytics
-    with engine.connect() as c: data=analytics(c,days)
+    from .db import settings
+    with engine.connect() as c:
+        data=analytics(c,days)
+        report_note=c.scalar(select(settings.c.value).where(settings.c.name=='report_note')) or ''
     columns=['name','clicks','joins','leaves','conversion','spend','cost_per_subscriber']
     headers=['Кампания','Переходы','Вступления','Выходы','Конверсия %','Расходы (все)','Цена подписчика']
     rows=[[row.get(col) for col in columns] for row in data['campaigns']]
     disclaimer=f'Период: {days} дней. Переходы — запросы, вступления — полученные события. Расходы — за всё время.'
+    if report_note: disclaimer+=' '+report_note[:1000]
     if kind=='xlsx':
         from openpyxl import Workbook
         from openpyxl.styles import Font, PatternFill

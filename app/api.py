@@ -40,7 +40,12 @@ async def protection(request,call_next):
 async def conflict(request,error): return JSONResponse({'detail':'Дубликат или неверная ссылка на связанную запись'},409)
 
 @app.exception_handler(SQLAlchemyError)
-async def db_error(request,error): return JSONResponse({'detail':'Ошибка базы данных. Проверьте журналы контейнера и миграции.'},503)
+async def db_error(request,error):
+    correlation=secrets.token_hex(12)
+    try:
+        with engine.begin() as c: c.execute(errors.insert().values(service='backend',code=type(error).__name__,message='Ошибка доступа к базе данных',correlation_id=correlation))
+    except Exception: pass
+    return JSONResponse({'detail':'Ошибка базы данных. Проверьте журналы контейнера и миграции.','correlation_id':correlation},503)
 
 @app.post('/api/auth/login')
 def sign_in(request:Request,data:dict=Body(...)):
@@ -89,6 +94,12 @@ def ready():
 
 @app.get('/api/catalog')
 def catalog(user=Depends(current)): return {'fields':FIELDS,'labels':LABELS,'role':user['role']}
+
+@app.get('/api/preferences')
+def preferences(user=Depends(current)):
+    with engine.connect() as c:
+        rows={row['name']:row['value'] for row in c.execute(select(settings)).mappings()}
+    return {'disable_animations':rows.get('disable_animations','false').lower()=='true','report_note':rows.get('report_note','')}
 
 @app.post('/api/import/{resource}')
 def import_records(resource:str,data:dict=Body(...),user=Depends(current)):
@@ -194,6 +205,9 @@ def draft_create(data:dict=Body(...),user=Depends(current)):
     content=str(data.get('text','')).strip()
     if len(content)>2000: raise HTTPException(422,'Максимум 2000 символов')
     with engine.begin() as c:
+        account=c.execute(select(accounts.c.status).where(accounts.c.id==account_id)).first()
+        if not account: raise HTTPException(422,'Аккаунт не найден')
+        if account.status=='PAUSED': raise HTTPException(409,'Аккаунт приостановлен')
         row=c.execute(drafts.insert().values(source_comment_id=source_id,account_id=account_id,text=content).returning(drafts)).mappings().one()
         log(c,user,'create','drafts',row['id'])
         c.execute(notifications.insert().values(message=f'Черновик #{row["id"]} ожидает модерации',key=f'draft:{row["id"]}'))

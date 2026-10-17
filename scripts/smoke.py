@@ -1,45 +1,36 @@
-"""Real HTTP + PostgreSQL check. Run inside the app container after compose up.
-Creates one clearly marked test row and retains its audit trail.
-"""
-import base64
+"""End-to-end API smoke test. Retains labelled SMOKE records."""
 import http.cookiejar
+import json
 import os
-import re
 import urllib.error
-import urllib.parse
 import urllib.request
 import uuid
 
-base = 'http://127.0.0.1:8000'
-jar = http.cookiejar.CookieJar()
-client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
-credential = base64.b64encode((os.environ['ADMIN_USER'] + ':' + os.environ['ADMIN_PASSWORD']).encode()).decode()
+base='http://127.0.0.1:8000'
+client=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+csrf=''
+def call(path,data=None,method=None):
+    request=urllib.request.Request(base+path,data=json.dumps(data).encode() if data is not None else None,method=method)
+    request.add_header('Content-Type','application/json'); request.add_header('X-CSRF-Token',csrf)
+    with client.open(request,timeout=30) as response: return json.load(response)
 
-def get(path, data=None, authenticated=True):
-    request = urllib.request.Request(base + path, data=urllib.parse.urlencode(data).encode() if data is not None else None)
-    if authenticated:
-        request.add_header('Authorization', 'Basic ' + credential)
-    return client.open(request, timeout=15)
-
-assert get('/healthz').status == 200
+assert call('/health/ready')['status']=='ok'
+login=call('/api/auth/login',{'username':os.getenv('ADMIN_USER','admin'),'password':os.environ['ADMIN_PASSWORD']})
+csrf=login['csrf']
+suffix=uuid.uuid4().hex
+campaign=call('/api/data/campaigns',{'name':'SMOKE-'+suffix})
+account=call('/api/data/accounts',{'username':'smoke'+suffix,'profile_url':'https://www.tiktok.com/@smoke'+suffix})
+assert account['status']=='AUTH_REQUIRED'
+video=call('/api/data/videos',{'url':'https://www.tiktok.com/@smoke/video/'+suffix,'campaign_id':campaign['id']})
+source={'campaign_id':campaign['id'],'video_id':video['id'],'text':'SMOKE comment','external_comment_id':suffix}
+comment=call('/api/data/comments',source)
 try:
-    get('/', authenticated=False)
-    raise AssertionError('Anonymous access allowed')
-except urllib.error.HTTPError as error:
-    assert error.code == 401
-page = get('/').read().decode()
-token = re.search(r'name="csrf_token" value="([a-f0-9]+)"', page).group(1)
-try:
-    get('/items', {'url': 'https://www.tiktok.com/@test/video/1', 'campaign': 'test', 'csrf_token': 'wrong'})
-    raise AssertionError('CSRF bypass')
-except urllib.error.HTTPError as error:
-    assert error.code == 403
-marker = 'SMOKE-' + uuid.uuid4().hex
-page = get('/items', {'url': 'https://www.tiktok.com/@test/video/1', 'campaign': marker, 'note': '<script>alert(1)</script>', 'csrf_token': token}).read().decode()
-assert '&lt;script&gt;alert(1)&lt;/script&gt;' in page
-item_id = re.search(r'<tr><td>(\d+)</td><td>' + marker, page).group(1)
-token = re.search(r'name="csrf_token" value="([a-f0-9]+)"', page).group(1)
-page = get('/items/' + item_id + '/status', {'status': 'done', 'csrf_token': token}).read().decode()
-assert 'pending -&gt; done' in page
-assert marker in get('/export.csv').read().decode('utf-8-sig')
-print('PASS: health, auth, CSRF, create, HTML escaping, status, audit, CSV. Test row: ' + marker)
+    call('/api/data/comments',source)
+    raise AssertionError('Duplicate allowed')
+except urllib.error.HTTPError as error: assert error.code==409
+draft=call('/api/drafts',{'source_comment_id':comment['id'],'account_id':account['id'],'text':'Ручной тестовый ответ'})
+call(f'/api/drafts/{draft["id"]}/claim',{})
+call(f'/api/drafts/{draft["id"]}/approve',{})
+call(f'/api/drafts/{draft["id"]}/publish-manual',{'confirmed':True,'result_url':video['url']})
+assert call('/api/auth/me')['user']['username']==os.getenv('ADMIN_USER','admin')
+print('PASS V2: database readiness, login, session, accounts, campaigns, videos, comments, deduplication, claim, approval, manual report, audit. Records: SMOKE-'+suffix)

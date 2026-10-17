@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 from fastapi import HTTPException
-from sqlalchemy import select, func
+from sqlalchemy import select, func, inspect
 
 os.environ.setdefault('ADMIN_USER','admin')
 os.environ.setdefault('ADMIN_PASSWORD','a'*64)
@@ -108,6 +108,7 @@ def test_ai_missing_key_and_mock_response(client):
         assert request_text('openai','fake-key','test-model','text')==('Контекстный ответ',10,3)
         assert call.call_args.kwargs['json']['store'] is False
     assert client.get('/api/integrations').json()['ai']['mode']=='manual'
+    assert client.post('/api/drafts/999999/generate-ai',json={}).status_code==409
 
 def test_validation_and_health(client):
     for url in ['http://tiktok.com','https://tiktok.com.evil.com','https://127.0.0.1','https://user@tiktok.com','https://tiktok.com:9']:
@@ -127,3 +128,15 @@ def test_csv_import_and_report(client):
     assert post(client,'/api/import/creators',{'csv_text':content})['duplicates_skipped']==1
     result=client.get('/api/analytics/export/xlsx')
     assert result.status_code==200 and result.content[:2]==b'PK'
+    from pathlib import Path
+    if Path('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf').exists():
+        result=client.get('/api/analytics/export/pdf')
+        assert result.status_code==200 and result.content.startswith(b'%PDF-')
+
+def test_schema_foreign_keys(client):
+    inspector=inspect(db.engine)
+    for table in db.meta.tables.values():
+        expected={(fk.parent.name,fk.target_fullname) for fk in table.foreign_keys}
+        actual={(local,fk['referred_table']+'.'+remote) for fk in inspector.get_foreign_keys(table.name)
+            for local,remote in zip(fk['constrained_columns'],fk['referred_columns'])}
+        assert actual==expected,table.name

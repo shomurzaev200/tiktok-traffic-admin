@@ -44,6 +44,8 @@ def validate(resource,data):
         else:
             value=str(value).strip()
             if len(value)>4000: raise HTTPException(422,'Текст длиннее 4000 символов')
+            length=getattr(TABLES[resource].c[key].type,'length',None)
+            if length and len(value)>length: raise HTTPException(422,f'Поле {key}: максимум {length} символов')
         if key in ('url','profile_url'): value=tiktok_url(value)
         if key=='username':
             value=value.lstrip('@')
@@ -66,7 +68,8 @@ def claim(c,draft_id,user):
 def transition(c,draft_id,action,user,payload):
     row=c.execute(select(drafts).where(drafts.c.id==draft_id).with_for_update()).mappings().first()
     if not row: raise HTTPException(404,'Черновик не найден')
-    if row['claimed_by']!=user['id']: raise HTTPException(409,'Сначала возьмите задачу в работу')
+    admin_release=action=='release' and user['role'] in ('ADMIN','SUPER_ADMIN')
+    if row['claimed_by']!=user['id'] and not admin_release: raise HTTPException(409,'Сначала возьмите задачу в работу')
     allowed={'approve':('REVIEW','APPROVED'),'reject':('REVIEW','SKIPPED'),'release':('REVIEW','DRAFTED'),'publish-manual':('APPROVED','PUBLISHED')}
     if action not in allowed: raise HTTPException(422,'Неизвестное действие')
     before,after=allowed[action]

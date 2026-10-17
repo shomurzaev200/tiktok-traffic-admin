@@ -56,7 +56,8 @@ ai_requests=table('ai_requests',Column('draft_id',ForeignKey('comment_drafts.id'
     Column('status',String(30)),Column('input_tokens',Integer,default=0),Column('output_tokens',Integer,default=0),Column('error',String(100),default=''))
 notifications=table('notifications',Column('message',Text,nullable=False),Column('key',String(160),unique=True,nullable=False),Column('status',String(20),default='UNREAD'))
 errors=table('system_errors',Column('service',String(40)),Column('code',String(80)),Column('message',String(200)),Column('correlation_id',String(64)),
-    Column('status',String(20),default='OPEN'))
+    Column('severity',String(20),default='ERROR'),Column('task_id',ForeignKey('tasks.id')),Column('account_id',ForeignKey('tiktok_accounts.id')),
+    Column('retry_count',Integer,default=0),Column('status',String(20),default='OPEN'))
 audit=table('audit_logs',Column('actor_id',ForeignKey('users.id')),Column('action',String(80)),Column('entity',String(60)),Column('entity_id',Integer))
 backups=table('backup_records',Column('filename',String(120),unique=True),Column('sha256',String(64)),Column('bytes',BigInteger),Column('status',String(30)))
 schedules=table('schedules',Column('name',String(120),nullable=False),Column('kind',String(40),nullable=False),Column('interval_minutes',Integer,default=1440),

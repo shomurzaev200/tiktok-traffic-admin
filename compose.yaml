@@ -2,6 +2,7 @@ name: tiktok-traffic-admin
 services:
   db:
     image: postgres:16-bookworm
+    mem_limit: 512m
     environment:
       POSTGRES_DB: traffic
       POSTGRES_USER: traffic
@@ -19,6 +20,7 @@ services:
       options: {max-size: "10m", max-file: "3"}
   app:
     build: .
+    mem_limit: 512m
     environment:
       DB_HOST: db
       DB_NAME: traffic
@@ -53,6 +55,7 @@ services:
       options: {max-size: "10m", max-file: "3"}
   redis:
     image: redis:7-bookworm
+    mem_limit: 192m
     profiles: [jobs, integrations]
     command: [redis-server, --appendonly, 'yes', --maxmemory, 128mb, --maxmemory-policy, noeviction]
     volumes: [redisdata:/data]
@@ -67,6 +70,7 @@ services:
       options: {max-size: '10m', max-file: '3'}
   worker:
     image: tiktok-traffic-admin-app
+    mem_limit: 384m
     profiles: [jobs]
     command: [celery, -A, app.worker.celery, worker, --loglevel=WARNING, --concurrency=1]
     environment: &job_env
@@ -89,6 +93,7 @@ services:
       options: {max-size: '10m', max-file: '3'}
   scheduler:
     image: tiktok-traffic-admin-app
+    mem_limit: 128m
     profiles: [jobs]
     command: [celery, -A, app.worker.celery, beat, --loglevel=WARNING, --schedule=/tmp/celerybeat-schedule]
     environment: *job_env
@@ -104,6 +109,7 @@ services:
       options: {max-size: '10m', max-file: '3'}
   telegram-bot:
     image: tiktok-traffic-admin-app
+    mem_limit: 192m
     profiles: [integrations]
     command: [python, -m, app.bot]
     environment: *job_env

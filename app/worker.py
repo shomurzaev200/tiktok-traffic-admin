@@ -56,4 +56,4 @@ def execute(task_id):
         retry=transient and row['attempts']<3
         with engine.begin() as c:
             c.execute(update(tasks).where(tasks.c.id==task_id).values(status='RETRY' if retry else 'FAILED',last_error=type(error).__name__,due_at=now()+timedelta(seconds=30*2**row['attempts'])))
-            c.execute(errors.insert().values(service='worker',code=type(error).__name__,message=f'Задача #{task_id} не выполнена; проверьте настройки интеграции',correlation_id=secrets.token_hex(12)))
+            c.execute(errors.insert().values(service='worker',code=type(error).__name__,message=f'Задача #{task_id} не выполнена; проверьте настройки интеграции',correlation_id=secrets.token_hex(12),task_id=task_id,retry_count=row['attempts']))

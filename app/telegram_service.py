@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import os
 import secrets
+from datetime import datetime, timezone
 import httpx
 from fastapi import Body, Depends, HTTPException
 from sqlalchemy import select, update
@@ -67,6 +68,7 @@ def ingest(update_data):
             campaign_id=c.scalar(select(links.c.campaign_id).where(links.c.invite_url==link_url)) if link_url else None
             if before and not after:
                 campaign_id=c.scalar(select(events.c.campaign_id).where(events.c.channel_id==channel['id'],events.c.user_hash==hashed,events.c.kind=='JOIN').order_by(events.c.id.desc()).limit(1))
-            c.execute(events.insert().values(update_id=update_data['update_id'],channel_id=channel['id'],user_hash=hashed,kind='JOIN' if after else 'LEAVE',campaign_id=campaign_id))
+            occurred=datetime.fromtimestamp(item['date'],timezone.utc) if item.get('date') else now()
+            c.execute(events.insert().values(update_id=update_data['update_id'],channel_id=channel['id'],user_hash=hashed,kind='JOIN' if after else 'LEAVE',campaign_id=campaign_id,created_at=occurred))
         return True
     except IntegrityError: return False
