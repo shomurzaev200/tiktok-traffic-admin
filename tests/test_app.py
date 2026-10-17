@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 os.environ.update(ADMIN_USER='admin', ADMIN_PASSWORD='a'*64, DB_PASSWORD='b'*64)
 from fastapi.testclient import TestClient
 from fastapi import HTTPException
-from app import main
+from app import legacy as main
 
 class AppTests(unittest.TestCase):
     def setUp(self):
