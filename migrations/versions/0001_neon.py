@@ -1,6 +1,7 @@
 """Add v2 tables; preserve legacy items and audit in place."""
 from alembic import op
 from app.db import meta
+from sqlalchemy import UniqueConstraint
 revision='0001_neon'
 down_revision=None
 
@@ -10,8 +11,10 @@ def upgrade():
     for name in ['users','sessions','telegram_channels','campaigns','tiktok_accounts','creators','videos','source_comments',
         'comment_drafts','publication_records','tasks','telegram_invite_links','telegram_membership_events','tracking_clicks',
         'ai_requests','notifications','system_errors','audit_logs','backup_records','schedules','settings','oauth_states']:
-        op.create_table(name, *[c._copy() for c in meta.tables[name].columns],
-            *[c._copy() for c in meta.tables[name].constraints if c.__class__.__name__=='UniqueConstraint'])
+        model=meta.tables[name]
+        unique=[UniqueConstraint(*[col.name for col in constraint.columns]) for constraint in list(model.constraints)
+            if isinstance(constraint,UniqueConstraint) and len(constraint.columns)>1]
+        op.create_table(name, *[col._copy() for col in list(model.columns)], *unique)
     for table in meta.tables.values():
         for index in table.indexes:
             op.create_index(index.name,table.name,[c.name for c in index.columns])
