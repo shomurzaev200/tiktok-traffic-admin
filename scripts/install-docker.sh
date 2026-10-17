@@ -5,10 +5,7 @@ if [[ "$ID" != ubuntu || "$VERSION_ID" != 24.04 ]]; then
   echo 'This script targets Ubuntu 24.04 only.' >&2
   exit 1
 fi
-if command -v docker >/dev/null 2>&1; then
-  echo 'Docker already exists; inspect docker --version and sudo docker compose version. No changes made.'
-  exit 0
-fi
+# A Docker CLI or Compose plugin alone does not imply Engine is installed.
 sudo apt-get update
 sudo apt-get install -y ca-certificates curl
 sudo install -m 0755 -d /etc/apt/keyrings
@@ -24,5 +21,7 @@ Signed-By: /etc/apt/keyrings/docker.asc
 EOF
 sudo apt-get update
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo systemctl daemon-reload
 sudo systemctl enable --now docker
+sudo docker info
 sudo docker compose version
