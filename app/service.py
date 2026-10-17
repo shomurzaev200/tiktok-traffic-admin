@@ -25,6 +25,8 @@ def validate(resource,data):
     for key,value in data.items():
         if value is None or value=='':
             if key.endswith('_id'): result[key]=None
+            elif key in INTS or key in ('budget','spend'): continue
+            elif key in ('username','profile_url','url','name','chat_id','kind'): raise HTTPException(422,'Поле не может быть пустым: '+key)
             elif value=='': result[key]=''
             continue
         if isinstance(allowed[key],list) and value not in allowed[key]: raise HTTPException(422,'Недопустимое значение '+key)

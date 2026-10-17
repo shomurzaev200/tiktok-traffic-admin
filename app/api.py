@@ -90,6 +90,18 @@ def ready():
 @app.get('/api/catalog')
 def catalog(user=Depends(current)): return {'fields':FIELDS,'labels':LABELS,'role':user['role']}
 
+@app.post('/api/import/{resource}')
+def import_records(resource:str,data:dict=Body(...),user=Depends(current)):
+    require(user)
+    from .reports import import_csv
+    return import_csv(resource,str(data.get('csv_text','')),user)
+
+@app.get('/api/analytics/export/{kind}')
+def report(kind:str,days:int=Query(30,ge=1,le=365),user=Depends(current)):
+    require(user,'ANALYST')
+    from .reports import export_report
+    return export_report(kind,days)
+
 @app.get('/api/system/status')
 def status(user=Depends(current)):
     ready()

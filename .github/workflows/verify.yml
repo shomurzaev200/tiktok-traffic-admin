@@ -45,9 +45,14 @@ jobs:
           docker compose --profile jobs config --quiet
           docker compose up -d --build --wait --wait-timeout 300
           docker compose exec -T app python < scripts/smoke_v2.py
+          before=$(docker compose exec -T app python -c 'from app.db import engine,accounts; from sqlalchemy import select,func; c=engine.connect(); print(c.scalar(select(func.count()).select_from(accounts)))')
           docker compose restart app
           sleep 12
+          after=$(docker compose exec -T app python -c 'from app.db import engine,accounts; from sqlalchemy import select,func; c=engine.connect(); print(c.scalar(select(func.count()).select_from(accounts)))')
+          test "$before" = "$after"
           docker compose exec -T app python < scripts/smoke_v2.py
+          docker compose --profile jobs up -d
+          docker compose exec -T app python < scripts/smoke_jobs.py
           bash scripts/backup.sh
           printf 'RESTORE_TEST\n' | bash scripts/restore.sh "$(basename "$(find backups -name '*.dump' | head -1)")"
       - if: always()

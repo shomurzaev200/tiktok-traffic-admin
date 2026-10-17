@@ -116,3 +116,14 @@ def test_validation_and_health(client):
     assert client.get('/api/openapi.json').status_code==200
     assert client.get('/api/data/accounts?limit=101').status_code==422
     assert client.post('/api/data/accounts',json={'username':'x','profile_url':'https://tiktok.com','token_encrypted':'fake'}).status_code==422
+    assert client.post('/api/data/campaigns',json={'name':'Blank numeric defaults','budget':'','spend':'','kpi':''}).status_code==200
+    assert client.post('/api/data/accounts',json={'username':'','profile_url':'https://tiktok.com'}).status_code==422
+
+def test_csv_import_and_report(client):
+    suffix=uuid.uuid4().hex
+    content=f'username,profile_url\nimport{suffix},https://www.tiktok.com/@import{suffix}\n'
+    result=post(client,'/api/import/creators',{'csv_text':content})
+    assert result['inserted']==1
+    assert post(client,'/api/import/creators',{'csv_text':content})['duplicates_skipped']==1
+    result=client.get('/api/analytics/export/xlsx')
+    assert result.status_code==200 and result.content[:2]==b'PK'
